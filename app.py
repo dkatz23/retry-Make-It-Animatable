@@ -9,6 +9,7 @@ import warnings
 from dataclasses import dataclass
 from glob import glob
 
+import requests
 import gradio as gr
 import matplotlib
 import numpy as np
@@ -16,6 +17,16 @@ import torch
 import torch.nn.functional as F
 import trimesh
 from pytorch3d.transforms import Transform3d
+from fastapi import FastAPI, Request
+import threading
+
+# Import the render integration module
+try:
+    import render_integration
+    HAS_RENDER_INTEGRATION = True
+except ImportError:
+    render_integration = None
+    HAS_RENDER_INTEGRATION = False
 
 sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
 
@@ -1116,37 +1127,11 @@ def vis_blender(
     }
 
 
-
-import requests
-import os
-
 def finish(db: DB = None):
-    # 1) If we have an output directory, upload the .glb
     if db is not None and db.output_dir and os.path.isdir(db.output_dir):
         print(f"Outputs stored in '{db.output_dir}'")
-        try:
-            # assume the final GLB is named <input_filename>.glb in that folder
-            input_basename = os.path.splitext(os.path.basename(db.output_dir))[0]
-            glb_path = os.path.join(db.output_dir, f"{input_basename}.glb")
-            if os.path.isfile(glb_path):
-                print(f"Uploading rigged GLB: {glb_path}")
-                with open(glb_path, "rb") as f:
-                    files = {"file": (os.path.basename(glb_path), f, "model/gltf-binary")}
-                    resp = requests.post(
-                        "https://viverse-backend.onrender.com/api/upload-rig",
-                        files=files,
-                        headers={"Authorization": f"Bearer {os.getenv('UPLOAD_TOKEN', '')}"}
-                    )
-                print(f"→ Upload response {resp.status_code}: {resp.text}")
-            else:
-                print(f"⚠️  Couldn’t find GLB at {glb_path} to upload")
-        except Exception as e:
-            print(f"❌ Error during upload: {e}")
-
-    # 2) Clear the DB and end the pipeline
     clear(db)
     return {state: gr.skip() if db is None else db}
-
 
 
 @Timing(msg="All done in", print_fn=gr.Success)
@@ -1525,6 +1510,16 @@ def init_blocks():
                                 - For **Gaussian Splats**, the **[3DGS Render Blender Addon by KIRI Engine](https://github.com/Kiri-Innovation/3dgs-render-blender-addon/releases/tag/v1.0.0)** is required to open the **BLEND** file here.
                                 """
                             )
+                with gr.Tab("Rig from URL"):
+                    url_input = gr.Textbox(label="Model URL (from Render.com)")
+                    rigged_output = gr.File(label="Rigged Model (Download)")
+                    rig_btn = gr.Button("Rig Model from URL")
+                    test_btn = gr.Button("Test Render.com Model")
+                    
+                    # Connect the button events
+                    rig_btn.click(rig_from_url, inputs=url_input, outputs=rigged_output)
+                    test_btn.click(test_rig, inputs=None, outputs=rigged_output)
+
         with gr.Row():
             gr.Markdown(
                 """
@@ -1663,26 +1658,60 @@ def init_blocks():
     return demo
 
 
+def download_file(url):
+    """Downloads a file from a URL to a temporary location."""
+    local_filename = os.path.join(tempfile.gettempdir(), url.split('/')[-1])
+    with requests.get(url, stream=True) as r:
+        r.raise_for_status()
+        with open(local_filename, 'wb') as f:
+            for chunk in r.iter_content(chunk_size=8192):
+                f.write(chunk)
+    return local_filename
+
+def rig_from_url(model_url):
+    """Rigs a model from a URL using the Make-It-Animatable pipeline"""
+    local_path = download_file(model_url)
+    db = DB()
+    for step in _pipeline(
+        input_path=local_path,
+        is_gs=False,
+        opacity_threshold=0.01,
+        no_fingers=True,
+        rest_pose_type="No",
+        ignore_pose_parts=[],
+        input_normal=False,
+        bw_fix=True,
+        bw_vis_bone="LeftArm",
+        reset_to_rest=True,
+        animation_file=None,
+        retarget=True,
+        inplace=True,
+        db=db,
+        export_temp=True,
+    ):
+        pass
+    if db.anim_vis_path and os.path.isfile(db.anim_vis_path):
+        return db.anim_vis_path
+    elif db.anim_path and os.path.isfile(db.anim_path):
+        return db.anim_path
+    else:
+        raise gr.Error("Rigging failed: output file not found.")
+
+def test_rig():
+    """Test function for rigging a model from a predefined URL"""
+    return rig_from_url("https://viverse-backend.onrender.com/models/meshy/test_avatar/punk_test.glb")
+
 if __name__ == "__main__":
+    # Ensure models are loaded relative to this script's location
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    os.chdir(script_dir)
+    
     init_models()
     demo = init_blocks()
-
-    # for input_path in ["./data/examples/bunny.glb"]:
-    #     for _ in _pipeline(
-    #         input_path,
-    #         is_gs=False,
-    #         opacity_threshold=0.01,
-    #         no_fingers=True,
-    #         rest_pose_type="No",
-    #         ignore_pose_parts=["Head"],
-    #         input_normal=False,
-    #         bw_fix=True,
-    #         bw_vis_bone="Head",
-    #         reset_to_rest=True,
-    #         animation_file="./data/Standard Run.fbx",
-    #         retarget=True,
-    #         inplace=True,
-    #     ):
-    #         pass
-
+    
+    # If the render_integration module is available, start the API
+    if HAS_RENDER_INTEGRATION:
+        render_integration.start_api_thread(_pipeline, DB)
+    
+    # Launch the demo
     demo.launch(server_name="0.0.0.0", server_port=7860, allowed_paths=["."], show_error=True, ssr_mode=False)
