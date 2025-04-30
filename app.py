@@ -1116,36 +1116,34 @@ def vis_blender(
     }
 
 
+
+import requests
+import os
+
 def finish(db: DB = None):
-    # Log where outputs went
+    # 1) If we have an output directory, upload the .glb
     if db is not None and db.output_dir and os.path.isdir(db.output_dir):
         print(f"Outputs stored in '{db.output_dir}'")
-
-    # If we have a rigged model, push it to Render.com
-    if db and os.path.isfile(db.anim_path):
         try:
-            with open(db.anim_path, "rb") as f:
-                files = {
-                    "file": (
-                        "rigged_model.glb",
-                        f,
-                        "model/gltf-binary"
+            # assume the final GLB is named <input_filename>.glb in that folder
+            input_basename = os.path.splitext(os.path.basename(db.output_dir))[0]
+            glb_path = os.path.join(db.output_dir, f"{input_basename}.glb")
+            if os.path.isfile(glb_path):
+                print(f"Uploading rigged GLB: {glb_path}")
+                with open(glb_path, "rb") as f:
+                    files = {"file": (os.path.basename(glb_path), f, "model/gltf-binary")}
+                    resp = requests.post(
+                        "https://viverse-backend.onrender.com/api/upload-rig",
+                        files=files,
+                        headers={"Authorization": f"Bearer {os.getenv('UPLOAD_TOKEN', '')}"}
                     )
-                }
-                resp = requests.post(
-        "https://viverse-backend.onrender.com/api/upload-rig",
-        files=files,
-        headers={"Authorization": "Bearer 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"}
-    )
-
-
-                resp.raise_for_status()
-                render_url = resp.json().get("url")
-                print("Uploaded to Render.com:", render_url)
+                print(f"→ Upload response {resp.status_code}: {resp.text}")
+            else:
+                print(f"⚠️  Couldn’t find GLB at {glb_path} to upload")
         except Exception as e:
-            print("Failed to upload to Render.com:", e)
+            print(f"❌ Error during upload: {e}")
 
-    # Cleanup and return state
+    # 2) Clear the DB and end the pipeline
     clear(db)
     return {state: gr.skip() if db is None else db}
 
