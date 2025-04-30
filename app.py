@@ -1133,10 +1133,12 @@ def finish(db: DB = None):
                     )
                 }
                 resp = requests.post(
-                    "https://your-render-service/upload",
-                    files=files,
-                    headers={"Authorization": "Bearer YOUR_TOKEN"}
-                )
+        "https://viverse-backend.onrender.com/api/upload-rig",
+        files=files,
+        headers={"Authorization": "Bearer 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"}
+    )
+
+
                 resp.raise_for_status()
                 render_url = resp.json().get("url")
                 print("Uploaded to Render.com:", render_url)
