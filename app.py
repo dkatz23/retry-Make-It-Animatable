@@ -1117,10 +1117,36 @@ def vis_blender(
 
 
 def finish(db: DB = None):
+    # Log where outputs went
     if db is not None and db.output_dir and os.path.isdir(db.output_dir):
         print(f"Outputs stored in '{db.output_dir}'")
+
+    # If we have a rigged model, push it to Render.com
+    if db and os.path.isfile(db.anim_path):
+        try:
+            with open(db.anim_path, "rb") as f:
+                files = {
+                    "file": (
+                        "rigged_model.glb",
+                        f,
+                        "model/gltf-binary"
+                    )
+                }
+                resp = requests.post(
+                    "https://your-render-service/upload",
+                    files=files,
+                    headers={"Authorization": "Bearer YOUR_TOKEN"}
+                )
+                resp.raise_for_status()
+                render_url = resp.json().get("url")
+                print("Uploaded to Render.com:", render_url)
+        except Exception as e:
+            print("Failed to upload to Render.com:", e)
+
+    # Cleanup and return state
     clear(db)
     return {state: gr.skip() if db is None else db}
+
 
 
 @Timing(msg="All done in", print_fn=gr.Success)
