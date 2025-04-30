@@ -16,7 +16,7 @@ fake-bpy-module
 gradio>=5.10
 ipykernel
 ipympl
-matplotlib
+matplotlib>=3.5.0
 numpy~=1.26.4
 plyfile
 potpourri3d
