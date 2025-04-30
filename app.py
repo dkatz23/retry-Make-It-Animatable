@@ -1669,7 +1669,8 @@ def download_file(url):
     return local_filename
 
 def rig_from_url(model_url):
-    """Rigs a model from a URL using the Make-It-Animatable pipeline"""
+    """Rigs a model from a URL using the Make-It-Animatable pipeline and uploads to Render.com"""
+    import requests
     local_path = download_file(model_url)
     db = DB()
     for step in _pipeline(
@@ -1691,12 +1692,30 @@ def rig_from_url(model_url):
     ):
         pass
     if db.anim_vis_path and os.path.isfile(db.anim_vis_path):
-        return db.anim_vis_path
+        rigged_path = db.anim_vis_path
     elif db.anim_path and os.path.isfile(db.anim_path):
-        return db.anim_path
+        rigged_path = db.anim_path
     else:
-        raise gr.Error("Rigging failed: output file not found.")
+        raise gr.Error("Rigging failed: output file not found")
 
+    # Upload to Render.com
+    with open(rigged_path, "rb") as f:
+        files = {"modelFile": (os.path.basename(rigged_path), f, "model/gltf-binary")}
+        response = requests.post(
+            "https://viverse-backend.onrender.com/api/upload-rigged-model",
+            files=files,
+            data={"clientType": "playcanvas"}
+        )
+        if response.status_code != 200:
+            raise gr.Error(f"Upload to Render.com failed: {response.text}")
+        result = response.json()
+        persistent_url = result.get("persistentUrl")
+        if not persistent_url:
+            raise gr.Error("No persistent URL returned from Render.com")
+        print(f"Uploaded rigged model to: {persistent_url}")
+
+    return rigged_path
+    
 def test_rig():
     """Test function for rigging a model from a predefined URL"""
     return rig_from_url("https://viverse-backend.onrender.com/models/meshy/test_avatar/punk_test.glb")
@@ -1709,9 +1728,17 @@ if __name__ == "__main__":
     init_models()
     demo = init_blocks()
     
-    # If the render_integration module is available, start the API
-    if HAS_RENDER_INTEGRATION:
+    # Start the FastAPI server thread if available
+    try:
+        import render_integration
+        import logging
+        logging.basicConfig(level=logging.INFO)
+        logger = logging.getLogger(__name__)
+        logger.info("Starting FastAPI server thread for render integration")
         render_integration.start_api_thread(_pipeline, DB)
+    except ImportError:
+        print("Warning: render_integration module not found, FastAPI server not started")
     
-    # Launch the demo
+    # Launch the Gradio demo
+    print("Launching Gradio demo")
     demo.launch(server_name="0.0.0.0", server_port=7860, allowed_paths=["."], show_error=True, ssr_mode=False)
