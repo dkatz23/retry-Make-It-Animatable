@@ -552,7 +552,7 @@ def get_masked_mesh(mesh: trimesh.Trimesh, mask: np.ndarray):
     return mesh
 
 
-def prepare_input(input_path: str, is_gs=False, opacity_threshold=0.0, db: DB = None, export_temp=False):
+def prepare_input(input_path: str, is_gs=False, opacity_threshold=0.0, db: DB = None, export_temp=False, original_filename: str = None):
     if not (input_path and os.path.isfile(input_path)):
         raise gr.Error(f"Input file not found: '{input_path}', please re-upload the file")
 
@@ -619,9 +619,15 @@ def prepare_input(input_path: str, is_gs=False, opacity_threshold=0.0, db: DB = 
     db.joints_path = os.path.join(output_dir, "joints.glb")
     db.rest_lbs_path = os.path.join(output_dir, f"rest_lbs.{'ply' if is_gs else 'glb'}")
     db.rest_vis_path = os.path.join(output_dir, "rest.glb")
-    input_filename = os.path.splitext(os.path.basename(input_path))[0]
-    db.anim_path = os.path.join(output_dir, f"{input_filename}.{'blend' if is_gs else 'fbx'}")
-    db.anim_vis_path = os.path.join(output_dir, f"{input_filename}.glb")
+    # Use the original filename for anim_path and anim_vis_path
+    if original_filename:
+        base_filename = os.path.splitext(os.path.basename(original_filename))[0]
+        anim_filename = f"{base_filename}_rigged"
+    else:
+        input_filename = os.path.splitext(os.path.basename(input_path))[0]
+        anim_filename = input_filename
+    db.anim_path = os.path.join(output_dir, f"{anim_filename}.{'blend' if is_gs else 'fbx'}")
+    db.anim_vis_path = os.path.join(output_dir, f"{anim_filename}.glb")
 
     return {state: db}
 
@@ -790,7 +796,7 @@ def model_forward_bones(pts: torch.Tensor) -> tuple[torch.Tensor]:
 
     return joints.cpu(), pose.cpu()
 
-
+# d.1 Main Pipeline and Gradio Interface
 def infer(input_normal: bool, db: DB):
     pts = db.pts
     pts_normal = db.pts_normal
@@ -1134,7 +1140,7 @@ def finish(db: DB = None):
     clear(db)
     return {state: gr.skip() if db is None else db}
 
-# d.1 Main Pipeline and Gradio Interface
+
 @Timing(msg="All done in", print_fn=gr.Success)
 def _pipeline(
     input_path: str,
@@ -1152,6 +1158,7 @@ def _pipeline(
     inplace=True,
     db: DB = None,
     export_temp=False,
+    original_filename: str = None,  # Add parameter to pass original filename
 ):
     if db is None:
         db = DB()
@@ -1160,7 +1167,7 @@ def _pipeline(
     clear(db)
     # Magic sleep to fix the random pydantic_core._pydantic_core.ValidationError in Gradio: https://github.com/gradio-app/gradio/issues/9366#issuecomment-2412903101
     time.sleep(0.1)
-    yield prepare_input(input_path, is_gs, opacity_threshold, db, export_temp)
+    yield prepare_input(input_path, is_gs, opacity_threshold, db, export_temp, original_filename=original_filename)
     time.sleep(0.1)
     yield preprocess(db)
     time.sleep(0.1)
@@ -1517,9 +1524,9 @@ def init_blocks():
                     rig_btn = gr.Button("Rig Model from URL")
                     test_btn = gr.Button("Test Render.com Model")
                     
-               # Connect the button events
-rig_btn.click(rig_from_url, inputs=url_input, outputs=rigged_output)
-test_btn.click(test_rig, inputs=url_input, outputs=rigged_output)
+                    # Connect the button events
+                    rig_btn.click(rig_from_url, inputs=url_input, outputs=rigged_output)
+                    test_btn.click(test_rig, inputs=url_input, outputs=rigged_output)
 
         with gr.Row():
             gr.Markdown(
@@ -1562,6 +1569,7 @@ test_btn.click(test_rig, inputs=url_input, outputs=rigged_output)
                 outputs=input_opacity_threshold,
                 show_progress="hidden",
             )
+
             # d.1 Main Pipeline and Gradio Interface (continued)
             def pipeline(inputs: dict, progress=gr.Progress()):
                 progress(0, "Starting...")
@@ -1657,7 +1665,6 @@ test_btn.click(test_rig, inputs=url_input, outputs=rigged_output)
             demo.unload(fn=lambda: not clear(state.value) or None)  # just to make sure fn returns None
 
     return demo
-
 # e.1 Utility Functions for URL Rigging
 def download_file(url):
     """Downloads a file from a URL to a temporary location."""
@@ -1669,6 +1676,7 @@ def download_file(url):
                 f.write(chunk)
     return local_filename
 
+# e.1 Utility Functions for URL Rigging (continued)
 def rig_from_url(model_url):
     """Rigs a model from a URL using the Make-It-Animatable pipeline and uploads to Render.com"""
     import requests
@@ -1690,6 +1698,7 @@ def rig_from_url(model_url):
         inplace=True,
         db=db,
         export_temp=True,
+        original_filename=model_url,  # Pass the model_url as the original filename
     ):
         pass
     if db.anim_vis_path and os.path.isfile(db.anim_vis_path):
