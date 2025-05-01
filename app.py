@@ -1522,11 +1522,11 @@ def init_blocks():
                     url_input = gr.Textbox(label="Model URL (from Render.com)")
                     rigged_output = gr.File(label="Rigged Model (Download)")
                     rig_btn = gr.Button("Rig Model from URL")
-                    test_btn = gr.Button("Test Render.com Model")
+                    animate_btn = gr.Button("Animate Model From URL")
                     
                     # Connect the button events
                     rig_btn.click(rig_from_url, inputs=url_input, outputs=rigged_output)
-                    test_btn.click(test_rig, inputs=url_input, outputs=rigged_output)
+                    animate_btn.click(animate_from_url, inputs=url_input, outputs=rigged_output)
 
         with gr.Row():
             gr.Markdown(
@@ -1725,14 +1725,62 @@ def rig_from_url(model_url):
         print(f"Uploaded rigged model to: {persistent_url}")
 
     return rigged_path
-    
+
 # e.1 Utility Functions for URL Rigging (continued)
-def test_rig(url: str):
-    """Test function for rigging a model from a user-provided URL"""
-    if not url:
-        raise gr.Error("No URL provided. Please enter a URL in the 'Model URL' field.")
-    return rig_from_url(url)
-    
+def animate_from_url(model_url):
+    """Rigs and animates a model from a URL using the Make-It-Animatable pipeline and uploads to Render.com, returning the GLB preview."""
+    import requests
+    import os
+    local_path = download_file(model_url)
+    # Use the standard running animation file (assume path is known)
+    animation_file = os.path.join(os.path.dirname(__file__), "..", "..", "data", "Mixamo", "animation", "Standard Run.fbx")
+    animation_file = os.path.abspath(animation_file)
+    if not os.path.isfile(animation_file):
+        raise gr.Error(f"Default animation file not found: {animation_file}")
+    db = DB()
+    for step in _pipeline(
+        input_path=local_path,
+        is_gs=False,
+        opacity_threshold=0.01,
+        no_fingers=True,
+        rest_pose_type="No",
+        ignore_pose_parts=[],
+        input_normal=False,
+        bw_fix=True,
+        bw_vis_bone="LeftArm",
+        reset_to_rest=True,
+        animation_file=animation_file,
+        retarget=True,
+        inplace=True,
+        db=db,
+        export_temp=True,
+        original_filename=model_url,  # Pass the model_url as the original filename
+    ):
+        pass
+    # Always return the GLB preview model
+    if db.anim_vis_path and os.path.isfile(db.anim_vis_path):
+        animated_path = db.anim_vis_path
+    else:
+        raise gr.Error("Animation failed: GLB preview not found")
+
+    # Upload to Render.com
+    with open(animated_path, "rb") as f:
+        files = {"modelFile": (os.path.basename(animated_path), f, "model/gltf-binary")}
+        response = requests.post(
+            "https://viverse-backend.onrender.com/api/upload-rigged-model",
+            files=files,
+            data={"clientType": "playcanvas"}
+        )
+        if response.status_code != 200:
+            raise gr.Error(f"Upload to Render.com failed: {response.text}")
+        result = response.json()
+        persistent_url = result.get("persistentUrl")
+        if not persistent_url:
+            raise gr.Error("No persistent URL returned from Render.com")
+        print(f"Uploaded animated model to: {persistent_url}")
+
+    return animated_path
+
 # f.1 Main Execution
 if __name__ == "__main__":
     # Ensure models are loaded relative to this script's location
