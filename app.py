@@ -1732,9 +1732,8 @@ def animate_from_url(model_url):
     import requests
     import os
     local_path = download_file(model_url)
-    # Use the standard running animation file (assume path is known)
-    animation_file = os.path.join(os.path.dirname(__file__), "..", "..", "data", "Mixamo", "animation", "Standard Run.fbx")
-    animation_file = os.path.abspath(animation_file)
+    # Use the standard running animation file (same as UI)
+    animation_file = os.path.abspath("./data/Standard Run.fbx")
     if not os.path.isfile(animation_file):
         raise gr.Error(f"Default animation file not found: {animation_file}")
     db = DB()
