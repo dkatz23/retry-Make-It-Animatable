@@ -1517,9 +1517,9 @@ def init_blocks():
                     rig_btn = gr.Button("Rig Model from URL")
                     test_btn = gr.Button("Test Render.com Model")
                     
-                    # Connect the button events
-                    rig_btn.click(rig_from_url, inputs=url_input, outputs=rigged_output)
-                    test_btn.click(test_rig, inputs=None, outputs=rigged_output)
+               # Connect the button events
+rig_btn.click(rig_from_url, inputs=url_input, outputs=rigged_output)
+test_btn.click(test_rig, inputs=url_input, outputs=rigged_output)
 
         with gr.Row():
             gr.Markdown(
@@ -1717,10 +1717,13 @@ def rig_from_url(model_url):
 
     return rigged_path
     
-def test_rig():
-    """Test function for rigging a model from a predefined URL"""
-    return rig_from_url("https://viverse-backend.onrender.com/models/meshy/test_avatar/punk_test.glb")
-
+# e.1 Utility Functions for URL Rigging (continued)
+def test_rig(url: str):
+    """Test function for rigging a model from a user-provided URL"""
+    if not url:
+        raise gr.Error("No URL provided. Please enter a URL in the 'Model URL' field.")
+    return rig_from_url(url)
+    
 # f.1 Main Execution
 if __name__ == "__main__":
     # Ensure models are loaded relative to this script's location
