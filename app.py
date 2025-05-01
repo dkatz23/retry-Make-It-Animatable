@@ -1,5 +1,3 @@
-# Version: 1.0.0
-
 # a.1 Imports and Initial Setup
 import spaces  # isort:skip
 import contextlib
@@ -108,6 +106,9 @@ def _log_message(
 import gradio.helpers
 
 gradio.helpers.log_message = _log_message
+
+# Restore the global cmap definition
+cmap = matplotlib.colormaps.get_cmap("plasma")
 
 # b.1 Data Classes and Utility Functions
 @dataclass()
