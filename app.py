@@ -1,3 +1,6 @@
+# Version: 1.0.0
+
+# a.1 Imports and Initial Setup
 import spaces  # isort:skip
 import contextlib
 import gc
@@ -76,12 +79,6 @@ gr.CheckboxGroup.postprocess = lambda self, value: (
 )
 
 
-def is_main_thread():
-    import threading
-
-    return threading.current_thread() is threading.main_thread()
-
-
 # Monkey patching gradio to use let gr.Info & gr.Warning also print on console
 def _log_message(
     message: str,
@@ -112,10 +109,7 @@ import gradio.helpers
 
 gradio.helpers.log_message = _log_message
 
-
-cmap = matplotlib.colormaps.get_cmap("plasma")
-
-
+# b.1 Data Classes and Utility Functions
 @dataclass()
 class DB:
     mesh: trimesh.Trimesh = None
@@ -159,6 +153,12 @@ def clear(db: DB = None):
     torch.cuda.empty_cache()
     print("Memory cleared")
     return db
+
+
+def is_main_thread():
+    import threading
+
+    return threading.current_thread() is threading.main_thread()
 
 
 def get_conflict_mask(dominant_idx: torch.Tensor, fn1, fn2, bones_idx_dict: dict[str, int]):
@@ -405,7 +405,7 @@ def reorganize_bone_data_(
                 new_data[..., i, :] = bone_data[..., bones_idx_dict[valid_parent.name], :]
     return new_data
 
-
+# c.1 Visualization and Processing Functions
 def vis_weights(verts: np.ndarray, weights: np.ndarray, faces: np.ndarray, vis_bone_index: int):
     if isinstance(verts, torch.Tensor):
         verts = verts.cpu().numpy()
@@ -1133,7 +1133,7 @@ def finish(db: DB = None):
     clear(db)
     return {state: gr.skip() if db is None else db}
 
-
+# d.1 Main Pipeline and Gradio Interface
 @Timing(msg="All done in", print_fn=gr.Success)
 def _pipeline(
     input_path: str,
@@ -1561,7 +1561,7 @@ def init_blocks():
                 outputs=input_opacity_threshold,
                 show_progress="hidden",
             )
-
+            # d.1 Main Pipeline and Gradio Interface (continued)
             def pipeline(inputs: dict, progress=gr.Progress()):
                 progress(0, "Starting...")
                 if device.type == "cpu":
@@ -1657,7 +1657,7 @@ def init_blocks():
 
     return demo
 
-
+# e.1 Utility Functions for URL Rigging
 def download_file(url):
     """Downloads a file from a URL to a temporary location."""
     local_filename = os.path.join(tempfile.gettempdir(), url.split('/')[-1])
@@ -1720,6 +1720,7 @@ def test_rig():
     """Test function for rigging a model from a predefined URL"""
     return rig_from_url("https://viverse-backend.onrender.com/models/meshy/test_avatar/punk_test.glb")
 
+# f.1 Main Execution
 if __name__ == "__main__":
     # Ensure models are loaded relative to this script's location
     script_dir = os.path.dirname(os.path.abspath(__file__))
