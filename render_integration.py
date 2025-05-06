@@ -72,7 +72,10 @@ async def rig_from_url_api(request: Request):
         DB_class = api_app.state.DB_class
 
         # Download the model
-        local_filename = os.path.join(tempfile.gettempdir(), model_url.split('/')[-1])
+        # Extract a base name from the model_url for later use
+        original_basename = os.path.splitext(os.path.basename(model_url))[0]
+        local_filename = os.path.join(tempfile.gettempdir(), original_basename + os.path.splitext(model_url)[-1]) # Ensure correct extension
+        
         logger.info(f"Downloading model to: {local_filename}")
         with requests.get(model_url, stream=True) as r:
             r.raise_for_status()
@@ -109,7 +112,7 @@ async def rig_from_url_api(request: Request):
             logger.info(f"Using rigged .glb output: {rigged_path}")
         elif db.anim_path and os.path.isfile(db.anim_path):
             rigged_path = db.anim_path
-            logger.warning(f"No .glb output found, using .fbx: {rigged_path}")
+            logger.warning(f"No .glb output found, using .fbx: {rigged_path} (Upload might fail if not GLB)")
         else:
             logger.error("Rigging failed: no output file found")
             return {"status": "error", "message": "Rigging failed: output file not found"}
@@ -118,10 +121,17 @@ async def rig_from_url_api(request: Request):
         logger.info(f"Uploading rigged model to Render.com: {rigged_path}")
         with open(rigged_path, "rb") as f:
             files = {"modelFile": (os.path.basename(rigged_path), f, "model/gltf-binary")}
+            # MODIFIED PAYLOAD to include modelStage and baseName
+            upload_payload = {
+                "clientType": "playcanvas",
+                "modelStage": "mia_rigged",
+                "baseName": original_basename # Send the extracted base name
+            }
+            logger.info(f"Node.js server upload payload: {upload_payload}")
             response = requests.post(
                 "https://viverse-backend.onrender.com/api/upload-rigged-model",
                 files=files,
-                data={"clientType": "playcanvas"}
+                data=upload_payload 
             )
             if response.status_code != 200:
                 logger.error(f"Upload to Render.com failed: {response.text}")
@@ -135,7 +145,7 @@ async def rig_from_url_api(request: Request):
         logger.info(f"Successfully uploaded rigged model to: {persistent_url}")
         return {"status": "done", "persistentUrl": persistent_url}
     except Exception as e:
-        logger.error(f"Error in rig_from_url_api: {str(e)}")
+        logger.error(f"Error in rig_from_url_api: {str(e)}", exc_info=True) # Added exc_info for more details
         return {"status": "error", "message": str(e)}
 
 # d.1 API Endpoint for Animating from URL
