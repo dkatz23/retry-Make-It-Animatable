@@ -1711,10 +1711,19 @@ def rig_from_url(model_url):
     # Upload to Render.com
     with open(rigged_path, "rb") as f:
         files = {"modelFile": (os.path.basename(rigged_path), f, "model/gltf-binary")}
+        # Consider adding modelStage and baseName to this payload if your Node.js server expects it
+        # For instance, to help Node.js name the file more descriptively:
+        original_basename = os.path.splitext(os.path.basename(model_url))[0]
+        upload_payload = {
+            "clientType": "playcanvas",
+            "modelStage": "mia_rigged", # Or a more specific stage if rig_from_url is only for T-pose initially
+            "baseName": original_basename,
+            "prompt": f"rigged model from {original_basename}" # Optional: provide a prompt
+        }
         response = requests.post(
             "https://viverse-backend.onrender.com/api/upload-rigged-model",
             files=files,
-            data={"clientType": "playcanvas"}
+            data=upload_payload # Use the more detailed payload
         )
         if response.status_code != 200:
             raise gr.Error(f"Upload to Render.com failed: {response.text}")
@@ -1724,7 +1733,7 @@ def rig_from_url(model_url):
             raise gr.Error("No persistent URL returned from Render.com")
         print(f"Uploaded rigged model to: {persistent_url}")
 
-    return rigged_path
+    return persistent_url # MODIFIED LINE
 
 # e.1 Utility Functions for URL Rigging (continued)
 def animate_from_url(model_url):
@@ -1786,22 +1795,29 @@ if __name__ == "__main__":
     script_dir = os.path.dirname(os.path.abspath(__file__))
     os.chdir(script_dir)
     print(f"INFO: Current working directory set to: {script_dir}")
+    sys.stdout.flush()
     print(f"INFO: Python sys.path: {sys.path}")
+    sys.stdout.flush()
 
     init_models()
     demo = init_blocks()
 
     # Start the FastAPI server thread if available
     print("INFO: Attempting to start FastAPI server...")
+    sys.stdout.flush()
     try:
         # Explicitly check for the file before importing for debugging
         render_integration_file_path = os.path.join(script_dir, "render_integration.py")
         print(f"INFO: Looking for render_integration.py at: {render_integration_file_path}")
+        sys.stdout.flush()
         if not os.path.exists(render_integration_file_path):
             print(f"CRITICAL_ERROR: render_integration.py not found at {render_integration_file_path}!")
+            sys.stdout.flush()
             print("INFO: Please ensure 'render_integration_animateRig_almostwroking.py' is renamed to 'render_integration.py' and is in the same directory as this script.")
+            sys.stdout.flush()
         else:
             print("INFO: render_integration.py found. Attempting import...")
+            sys.stdout.flush()
 
         import render_integration # Assumes it's named render_integration.py
 
@@ -1811,20 +1827,32 @@ if __name__ == "__main__":
         logger = logging.getLogger(__name__) # Use __name__ for the logger
 
         logger.info("Successfully imported render_integration module.")
+        # sys.stdout.flush() # logger should handle its own flushing or use a stream handler that does
+
         logger.info("Starting FastAPI server thread for render integration via render_integration.start_api_thread...")
         render_integration.start_api_thread(_pipeline, DB)
         logger.info("Call to render_integration.start_api_thread completed (FastAPI server should be starting/running in a separate thread).")
 
     except ImportError as e:
         print(f"CRITICAL_ERROR: Failed to import render_integration. ImportError: {e}")
+        sys.stdout.flush()
+        sys.stderr.flush()
         print("INFO: Please ensure 'render_integration.py' (potentially renamed from 'render_integration_animateRig_almostwroking.py') is in the same directory as this script and there are no other import errors within render_integration.py itself.")
+        sys.stdout.flush()
         print("FastAPI server WILL NOT BE STARTED due to ImportError.")
+        sys.stdout.flush()
     except Exception as e:
         print(f"CRITICAL_ERROR: An unexpected error occurred while trying to start FastAPI server: {e}")
+        sys.stdout.flush()
+        sys.stderr.flush()
         import traceback
         print(traceback.format_exc())
+        sys.stdout.flush()
+        sys.stderr.flush()
         print("FastAPI server WILL NOT BE STARTED due to an unexpected error.")
+        sys.stdout.flush()
 
     # Launch the Gradio demo
     print("Launching Gradio demo...")
+    sys.stdout.flush()
     demo.launch(server_name="0.0.0.0", server_port=7860, allowed_paths=["."], show_error=True, ssr_mode=False)
