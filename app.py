@@ -1673,7 +1673,7 @@ def init_blocks():
             api_rig_from_url_trigger_btn.click(
                 fn=rig_from_url, 
                 inputs=[url_input], # The `rig_from_url` function takes `model_url` (string)
-                outputs=[api_dummy_string_output], # MODIFIED: Output to a dummy Textbox to ensure string passthrough
+                outputs=[api_dummy_string_output], # MODIFIED BACK: Output to a dummy Textbox to ensure string passthrough
                 api_name="exposed_rig_from_url_api"  # Explicit API name
             )
             # --- End explicit API endpoint section ---
