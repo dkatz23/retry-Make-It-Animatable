@@ -1667,19 +1667,14 @@ def init_blocks():
             # --- Add this section for an explicit API endpoint for rig_from_url ---
             with gr.Row(visible=False): # Hidden row
                 api_rig_from_url_trigger_btn = gr.Button("API Trigger for Rig From URL")
-            # Takes one input (model_url string) and should return one output (persistent_url string)
-            # The rig_from_url function already handles taking model_url and returning persistent_url.
-            # The url_input Textbox can serve as a dummy input conduit for type hinting if needed by Gradio's API setup,
-            # or we can define it more abstractly if Gradio handles api_name calls by just needing the function signature.
-            # For robustness, let's ensure the Gradio API call knows what input component type to expect.
-            # We use `url_input` (which is a `gr.Textbox`) as the type for the input to rig_from_url.
-            # And `rigged_output` (which is a `gr.File`) can serve as a dummy for the output type, though the actual return is a string.
-            # Gradio often just needs to match the function signature and types for named API calls.
+            # Define a dummy Textbox output for the API, similar to Trellis, to ensure string passthrough
+            api_dummy_string_output = gr.Textbox(label="API String Output", visible=False) 
+
             api_rig_from_url_trigger_btn.click(
                 fn=rig_from_url, 
                 inputs=[url_input], # The `rig_from_url` function takes `model_url` (string)
-                outputs=[rigged_output], # `rig_from_url` returns `persistent_url` (string), gr.File can handle this for API output too
-                api_name="exposed_rig_from_url_api"  # New explicit API name
+                outputs=[api_dummy_string_output], # MODIFIED: Output to a dummy Textbox to ensure string passthrough
+                api_name="exposed_rig_from_url_api"  # Explicit API name
             )
             # --- End explicit API endpoint section ---
 
