@@ -1785,21 +1785,46 @@ if __name__ == "__main__":
     # Ensure models are loaded relative to this script's location
     script_dir = os.path.dirname(os.path.abspath(__file__))
     os.chdir(script_dir)
-    
+    print(f"INFO: Current working directory set to: {script_dir}")
+    print(f"INFO: Python sys.path: {sys.path}")
+
     init_models()
     demo = init_blocks()
-    
+
     # Start the FastAPI server thread if available
+    print("INFO: Attempting to start FastAPI server...")
     try:
-        import render_integration
+        # Explicitly check for the file before importing for debugging
+        render_integration_file_path = os.path.join(script_dir, "render_integration.py")
+        print(f"INFO: Looking for render_integration.py at: {render_integration_file_path}")
+        if not os.path.exists(render_integration_file_path):
+            print(f"CRITICAL_ERROR: render_integration.py not found at {render_integration_file_path}!")
+            print("INFO: Please ensure 'render_integration_animateRig_almostwroking.py' is renamed to 'render_integration.py' and is in the same directory as this script.")
+        else:
+            print("INFO: render_integration.py found. Attempting import...")
+
+        import render_integration # Assumes it's named render_integration.py
+
+        # Configure logging - it's good to have this defined before using logger
         import logging
         logging.basicConfig(level=logging.INFO)
-        logger = logging.getLogger(__name__)
-        logger.info("Starting FastAPI server thread for render integration")
+        logger = logging.getLogger(__name__) # Use __name__ for the logger
+
+        logger.info("Successfully imported render_integration module.")
+        logger.info("Starting FastAPI server thread for render integration via render_integration.start_api_thread...")
         render_integration.start_api_thread(_pipeline, DB)
-    except ImportError:
-        print("Warning: render_integration module not found, FastAPI server not started")
-    
+        logger.info("Call to render_integration.start_api_thread completed (FastAPI server should be starting/running in a separate thread).")
+
+    except ImportError as e:
+        print(f"CRITICAL_ERROR: Failed to import render_integration. ImportError: {e}")
+        print("INFO: Please ensure 'render_integration.py' (potentially renamed from 'render_integration_animateRig_almostwroking.py') is in the same directory as this script and there are no other import errors within render_integration.py itself.")
+        print("FastAPI server WILL NOT BE STARTED due to ImportError.")
+    except Exception as e:
+        print(f"CRITICAL_ERROR: An unexpected error occurred while trying to start FastAPI server: {e}")
+        import traceback
+        print(traceback.format_exc())
+        print("FastAPI server WILL NOT BE STARTED due to an unexpected error.")
+
     # Launch the Gradio demo
-    print("Launching Gradio demo")
+    print("Launching Gradio demo...")
     demo.launch(server_name="0.0.0.0", server_port=7860, allowed_paths=["."], show_error=True, ssr_mode=False)
